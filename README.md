@@ -48,6 +48,78 @@ Edit `.env` with your TeamSpeak server details:
 - `API_PORT`: API server port (default: 8000)
 - `CACHE_TTL`: How often to refresh authorized users from TeamSpeak in seconds (default: 30)
 
+## Docker
+
+### Using Pre-built Image
+
+Pull and run the latest image from GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/OWNER/teamspeak-auth:latest
+
+docker run -d \
+  --name teamspeak-auth \
+  -p 8000:8000 \
+  -e TS_HOST=your-teamspeak-server \
+  -e TS_PORT=10011 \
+  -e TS_USER=serveradmin \
+  -e TS_PASSWORD=your-password \
+  -e REQUIRED_SERVER_GROUPS=6,9 \
+  ghcr.io/OWNER/teamspeak-auth:latest
+```
+
+### Using Docker Compose
+
+Create a `docker-compose.yml`:
+
+```yaml
+version: '3.8'
+
+services:
+  teamspeak-auth:
+    image: ghcr.io/OWNER/teamspeak-auth:latest
+    container_name: teamspeak-auth
+    ports:
+      - "8000:8000"
+    environment:
+      - TS_HOST=your-teamspeak-server
+      - TS_PORT=10011
+      - TS_USER=serveradmin
+      - TS_PASSWORD=your-password
+      - REQUIRED_SERVER_GROUPS=6,9
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - CACHE_TTL=30
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/status')"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+```
+
+### Building Locally
+
+Using Docker Compose (recommended):
+
+```bash
+# Build and start
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop
+docker compose down
+```
+
+Using Docker CLI:
+
+```bash
+docker build -t teamspeak-auth .
+docker run -p 8000:8000 --env-file .env teamspeak-auth
+```
+
 ## Usage
 
 Start the FastAPI server:
