@@ -115,13 +115,17 @@ async def forward_auth(request: Request):
 
     if is_authorized:
         user_info = auth_service.get_authorized_user_info(client_ip)
-        logger.info(f"Authorized request from {client_ip} (user: {user_info.get('nickname')})")
+
+        nickname = "localuser"
+        if user_info:
+            nickname = user_info.get("nickname")
+            logger.info(f"Authorized request from {client_ip} (user: {nickname})")
 
         # Return 200 OK with user information in headers
         return {
             "status": "authorized",
             "ip": client_ip,
-            "user": user_info.get("nickname"),
+            "user": nickname,
         }
     else:
         logger.warning(f"Unauthorized request from {client_ip}")
