@@ -1,6 +1,6 @@
 """Tests for authorization service."""
 
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -24,8 +24,12 @@ def test_authorization_service_init():
     assert service.ts_client is not None
 
 
-def test_is_authorized_returns_false_for_unknown_ip():
+@patch("teamspeak_auth.auth_service.config")
+def test_is_authorized_returns_false_for_unknown_ip(mock_config):
     """Test that is_authorized returns False for unknown IPs."""
+    # Mock config to have no authorized subnets
+    mock_config.authorized_subnets = []
+
     service = AuthorizationService()
     service.authorized_ips = {"192.168.1.100": {"nickname": "User1"}}
 
@@ -87,3 +91,50 @@ def test_get_cache_age():
     age = service.get_cache_age()
     assert age >= 10.5
     assert age < 11.0  # Should be close to 10.5
+
+
+@patch("teamspeak_auth.auth_service.config")
+def test_is_authorized_via_subnet(mock_config):
+    """Test that IPs in authorized subnets are authorized."""
+    # Mock config to have authorized subnets
+    mock_config.authorized_subnets = ["192.168.1.0/24", "10.0.0.0/8"]
+
+    service = AuthorizationService()
+    service.authorized_ips = {}  # No TeamSpeak authorized IPs
+
+    # IP in first subnet should be authorized
+    assert service.is_authorized("192.168.1.100") is True
+    # IP in second subnet should be authorized
+    assert service.is_authorized("10.0.5.20") is True
+    # IP not in any subnet should not be authorized
+    assert service.is_authorized("172.16.0.1") is False
+
+
+@patch("teamspeak_auth.auth_service.config")
+def test_is_authorized_subnet_takes_precedence(mock_config):
+    """Test that subnet authorization is checked before TeamSpeak authorization."""
+    # Mock config to have authorized subnets
+    mock_config.authorized_subnets = ["192.168.1.0/24"]
+
+    service = AuthorizationService()
+    service.authorized_ips = {"10.0.0.1": {"nickname": "User1"}}
+
+    # IP in subnet should be authorized even if not in TeamSpeak list
+    assert service.is_authorized("192.168.1.50") is True
+    # IP in TeamSpeak list should still be authorized
+    assert service.is_authorized("10.0.0.1") is True
+
+
+@patch("teamspeak_auth.auth_service.config")
+def test_is_authorized_with_invalid_subnet_config(mock_config):
+    """Test that invalid subnet configurations are handled gracefully."""
+    # Mock config with an invalid subnet
+    mock_config.authorized_subnets = ["invalid_subnet", "192.168.1.0/24"]
+
+    service = AuthorizationService()
+    service.authorized_ips = {}
+
+    # Valid subnet should still work despite invalid one
+    assert service.is_authorized("192.168.1.100") is True
+    # IP not in valid subnet should not be authorized
+    assert service.is_authorized("10.0.0.1") is False
