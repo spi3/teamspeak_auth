@@ -60,6 +60,28 @@ def test_auth_endpoint_authorized(client, mock_auth_service):
         assert data["status"] == "authorized"
         assert data["user"] == "TestUser"
 
+        # Check that X-Auth-User header is set
+        assert "X-Auth-User" in response.headers
+        assert response.headers["X-Auth-User"] == "TestUser"
+
+
+def test_auth_endpoint_authorized_via_subnet(client, mock_auth_service):
+    """Test /auth endpoint returns 200 for subnet-authorized IP with default nickname."""
+    mock_auth_service.is_authorized.return_value = True
+    mock_auth_service.get_authorized_user_info.return_value = None  # No TeamSpeak user info
+
+    with patch("teamspeak_auth.api.auth_service", mock_auth_service):
+        response = client.get("/auth")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["status"] == "authorized"
+        assert data["user"] == "localuser"
+
+        # Check that X-Auth-User header is set with default nickname
+        assert "X-Auth-User" in response.headers
+        assert response.headers["X-Auth-User"] == "localuser"
+
 
 def test_auth_endpoint_with_x_forwarded_for(client, mock_auth_service):
     """Test /auth endpoint uses X-Forwarded-For header."""

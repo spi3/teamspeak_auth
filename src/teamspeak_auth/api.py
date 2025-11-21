@@ -3,6 +3,7 @@
 import logging
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .auth_service import AuthorizationService
@@ -119,14 +120,21 @@ async def forward_auth(request: Request):
         nickname = "localuser"
         if user_info:
             nickname = user_info.get("nickname")
-            logger.info(f"Authorized request from {client_ip} (user: {nickname})")
 
-        # Return 200 OK with user information in headers
-        return {
-            "status": "authorized",
-            "ip": client_ip,
-            "user": nickname,
-        }
+        logger.info(f"Authorized request from {client_ip} (user: {nickname})")
+
+        # Return 200 OK with user information in headers and body
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "authorized",
+                "ip": client_ip,
+                "user": nickname,
+            },
+            headers={
+                "X-Auth-User": nickname,
+            },
+        )
     else:
         logger.warning(f"Unauthorized request from {client_ip}")
         raise HTTPException(status_code=403, detail="Forbidden: IP address not authorized")
