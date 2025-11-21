@@ -1,6 +1,7 @@
 """Authorization service for managing user authorization state."""
 
 import asyncio
+import ipaddress
 import logging
 import time
 
@@ -96,9 +97,40 @@ class AuthorizationService:
             self.ts_client.disconnect()
             raise
 
+    def _is_in_authorized_subnet(self, ip_address: str) -> bool:
+        """
+        Check if an IP address is in any of the authorized subnets.
+
+        Args:
+            ip_address: The IP address to check.
+
+        Returns:
+            True if the IP is in an authorized subnet, False otherwise.
+        """
+        if not config.authorized_subnets:
+            return False
+
+        try:
+            ip = ipaddress.ip_address(ip_address)
+            for subnet_str in config.authorized_subnets:
+                try:
+                    subnet = ipaddress.ip_network(subnet_str, strict=False)
+                    if ip in subnet:
+                        logger.debug(f"IP {ip_address} is in authorized subnet {subnet_str}")
+                        return True
+                except ValueError as e:
+                    logger.warning(f"Invalid subnet configuration '{subnet_str}': {e}")
+            return False
+        except ValueError as e:
+            logger.warning(f"Invalid IP address '{ip_address}': {e}")
+            return False
+
     def is_authorized(self, ip_address: str) -> bool:
         """
         Check if an IP address is authorized.
+
+        First checks if the IP is in an authorized subnet, then checks
+        if the IP is in the list of authorized TeamSpeak clients.
 
         Args:
             ip_address: The IP address to check.
@@ -106,6 +138,12 @@ class AuthorizationService:
         Returns:
             True if the IP address is authorized, False otherwise.
         """
+        # First check if IP is in an authorized subnet
+        if self._is_in_authorized_subnet(ip_address):
+            logger.debug(f"IP {ip_address} is authorized via subnet")
+            return True
+
+        # Then check if IP is in the TeamSpeak authorized list
         is_auth = ip_address in self.authorized_ips
 
         if is_auth:

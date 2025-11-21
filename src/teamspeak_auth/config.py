@@ -59,6 +59,12 @@ class Config(BaseSettings):
         description="How long to cache TeamSpeak user data in seconds",
     )
 
+    # Authorization settings
+    authorized_subnets: str = Field(
+        default="",
+        description="Comma-separated list of IP subnets (CIDR notation) that are always authorized",
+    )
+
     @field_validator("required_server_groups", mode="after")
     @classmethod
     def parse_server_groups(cls, v: str) -> list[int]:
@@ -66,6 +72,16 @@ class Config(BaseSettings):
         if isinstance(v, list):
             return v
         return [int(x.strip()) for x in v.split(",")]
+
+    @field_validator("authorized_subnets", mode="after")
+    @classmethod
+    def parse_authorized_subnets(cls, v: str) -> list[str]:
+        """Parse comma-separated subnet CIDRs into a list of strings."""
+        if isinstance(v, list):
+            return v
+        if not v or v.strip() == "":
+            return []
+        return [x.strip() for x in v.split(",") if x.strip()]
 
 
 config = Config()
