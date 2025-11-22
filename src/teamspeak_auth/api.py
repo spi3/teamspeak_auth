@@ -39,6 +39,43 @@ class StatusResponse(BaseModel):
     cache_ttl_seconds: int
 
 
+# OvenMediaEngine Admission Webhook models
+class OMEClientInfo(BaseModel):
+    """Client information from OvenMediaEngine webhook."""
+
+    address: str
+    port: int
+    real_ip: str | None = None
+    user_agent: str | None = None
+
+
+class OMERequestInfo(BaseModel):
+    """Request information from OvenMediaEngine webhook."""
+
+    direction: str  # "incoming" (publish) or "outgoing" (playback)
+    protocol: str  # "webrtc", "rtmp", "srt", "llhls", "thumbnail"
+    status: str  # "opening" or "closing"
+    url: str
+    new_url: str | None = None
+    time: str  # ISO8601 timestamp
+
+
+class OMEAdmissionRequest(BaseModel):
+    """Request model for OvenMediaEngine Admission Webhook."""
+
+    client: OMEClientInfo
+    request: OMERequestInfo
+
+
+class OMEAdmissionResponse(BaseModel):
+    """Response model for OvenMediaEngine Admission Webhook."""
+
+    allowed: bool | None = None
+    new_url: str | None = None
+    lifetime: int | None = None  # milliseconds, 0 = infinity
+    reason: str | None = None
+
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize the authorization service on startup."""
@@ -73,6 +110,7 @@ async def root():
             "/auth": "ForwardAuth endpoint for reverse proxies (Traefik, etc.)",
             "/auth/check": "Check if requesting IP is authorized",
             "/auth/check/{ip}": "Check if specific IP is authorized",
+            "/ome/admission": "OvenMediaEngine Admission Webhook endpoint",
             "/status": "Service status and statistics",
         },
     }
@@ -226,3 +264,60 @@ async def get_status():
         cache_age_seconds=auth_service.get_cache_age(),
         cache_ttl_seconds=config.cache_ttl,
     )
+
+
+@app.post("/ome/admission")
+async def ome_admission_webhook(payload: OMEAdmissionRequest):
+    """
+    OvenMediaEngine Admission Webhook endpoint.
+
+    This endpoint implements the OvenMediaEngine Admission Webhooks spec:
+    https://docs.ovenmediaengine.com/access-control/admission-webhooks
+
+    For "opening" requests, checks if the client IP is authorized and returns
+    an appropriate response. For "closing" requests, returns an empty object.
+
+    Returns:
+        - For opening: {"allowed": true/false, "reason": "..."}
+        - For closing: {}
+    """
+    if not auth_service:
+        raise HTTPException(status_code=503, detail="Authorization service not available")
+
+    # For closing status, return empty object
+    if payload.request.status == "closing":
+        logger.debug(
+            f"OME closing: {payload.client.address} - {payload.request.direction} "
+            f"{payload.request.protocol} {payload.request.url}"
+        )
+        return {}
+
+    # For opening status, check authorization
+    # Use real_ip if available (forwarded), otherwise use address
+    client_ip = payload.client.real_ip or payload.client.address
+
+    is_authorized = auth_service.is_authorized(client_ip)
+
+    if is_authorized:
+        user_info = auth_service.get_authorized_user_info(client_ip)
+        nickname = user_info.get("nickname") if user_info else "localuser"
+
+        logger.info(
+            f"OME authorized: {client_ip} (user: {nickname}) - {payload.request.direction} "
+            f"{payload.request.protocol} {payload.request.url}"
+        )
+
+        return OMEAdmissionResponse(
+            allowed=True,
+            lifetime=0,  # No timeout
+        )
+    else:
+        logger.warning(
+            f"OME rejected: {client_ip} - {payload.request.direction} "
+            f"{payload.request.protocol} {payload.request.url}"
+        )
+
+        return OMEAdmissionResponse(
+            allowed=False,
+            reason="IP address not authorized",
+        )

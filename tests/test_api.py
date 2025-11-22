@@ -147,3 +147,113 @@ def test_status_endpoint(client, mock_auth_service):
             assert data["authorized_users_count"] == 2
             assert data["cache_age_seconds"] == 15.3
             assert data["cache_ttl_seconds"] == 30
+
+
+def test_ome_admission_opening_authorized(client, mock_auth_service):
+    """Test OME admission webhook allows authorized IP."""
+    mock_auth_service.is_authorized.return_value = True
+    mock_auth_service.get_authorized_user_info.return_value = {
+        "nickname": "TestUser",
+        "groups": ["6"],
+    }
+
+    payload = {
+        "client": {
+            "address": "192.168.1.100",
+            "port": 12345,
+        },
+        "request": {
+            "direction": "outgoing",
+            "protocol": "webrtc",
+            "status": "opening",
+            "url": "ws://stream.example.com:3333/app/stream",
+            "time": "2025-11-21T00:00:00Z",
+        },
+    }
+
+    with patch("teamspeak_auth.api.auth_service", mock_auth_service):
+        response = client.post("/ome/admission", json=payload)
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["allowed"] is True
+        assert data["lifetime"] == 0
+
+
+def test_ome_admission_opening_unauthorized(client, mock_auth_service):
+    """Test OME admission webhook rejects unauthorized IP."""
+    mock_auth_service.is_authorized.return_value = False
+
+    payload = {
+        "client": {
+            "address": "192.168.1.200",
+            "port": 12345,
+        },
+        "request": {
+            "direction": "outgoing",
+            "protocol": "webrtc",
+            "status": "opening",
+            "url": "ws://stream.example.com:3333/app/stream",
+            "time": "2025-11-21T00:00:00Z",
+        },
+    }
+
+    with patch("teamspeak_auth.api.auth_service", mock_auth_service):
+        response = client.post("/ome/admission", json=payload)
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["allowed"] is False
+        assert data["reason"] == "IP address not authorized"
+
+
+def test_ome_admission_closing(client, mock_auth_service):
+    """Test OME admission webhook returns empty object for closing status."""
+    payload = {
+        "client": {
+            "address": "192.168.1.100",
+            "port": 12345,
+        },
+        "request": {
+            "direction": "outgoing",
+            "protocol": "webrtc",
+            "status": "closing",
+            "url": "ws://stream.example.com:3333/app/stream",
+            "time": "2025-11-21T00:00:00Z",
+        },
+    }
+
+    with patch("teamspeak_auth.api.auth_service", mock_auth_service):
+        response = client.post("/ome/admission", json=payload)
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data == {}
+
+
+def test_ome_admission_uses_real_ip(client, mock_auth_service):
+    """Test OME admission webhook uses real_ip when available."""
+    mock_auth_service.is_authorized.return_value = True
+    mock_auth_service.get_authorized_user_info.return_value = None
+
+    payload = {
+        "client": {
+            "address": "10.0.0.1",
+            "port": 12345,
+            "real_ip": "192.168.1.100",
+        },
+        "request": {
+            "direction": "incoming",
+            "protocol": "rtmp",
+            "status": "opening",
+            "url": "rtmp://stream.example.com/app/stream",
+            "time": "2025-11-21T00:00:00Z",
+        },
+    }
+
+    with patch("teamspeak_auth.api.auth_service", mock_auth_service):
+        response = client.post("/ome/admission", json=payload)
+        assert response.status_code == 200
+
+        # Verify is_authorized was called with real_ip, not address
+        mock_auth_service.is_authorized.assert_called_with("192.168.1.100")
