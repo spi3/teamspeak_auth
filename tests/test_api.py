@@ -38,7 +38,7 @@ def test_root_endpoint(client):
 
 def test_auth_endpoint_unauthorized(client, mock_auth_service):
     """Test /auth endpoint returns 403 for unauthorized IP."""
-    with patch("teamspeak_auth.api.auth_service", mock_auth_service):
+    with patch("teamspeak_auth.api.dependencies.auth_service", mock_auth_service):
         response = client.get("/auth")
         assert response.status_code == 403
         assert "Forbidden" in response.json()["detail"]
@@ -52,7 +52,7 @@ def test_auth_endpoint_authorized(client, mock_auth_service):
         "groups": ["6"],
     }
 
-    with patch("teamspeak_auth.api.auth_service", mock_auth_service):
+    with patch("teamspeak_auth.api.dependencies.auth_service", mock_auth_service):
         response = client.get("/auth")
         assert response.status_code == 200
 
@@ -70,7 +70,7 @@ def test_auth_endpoint_authorized_via_subnet(client, mock_auth_service):
     mock_auth_service.is_authorized.return_value = True
     mock_auth_service.get_authorized_user_info.return_value = None  # No TeamSpeak user info
 
-    with patch("teamspeak_auth.api.auth_service", mock_auth_service):
+    with patch("teamspeak_auth.api.dependencies.auth_service", mock_auth_service):
         response = client.get("/auth")
         assert response.status_code == 200
 
@@ -91,7 +91,7 @@ def test_auth_endpoint_with_x_forwarded_for(client, mock_auth_service):
         "groups": ["6"],
     }
 
-    with patch("teamspeak_auth.api.auth_service", mock_auth_service):
+    with patch("teamspeak_auth.api.dependencies.auth_service", mock_auth_service):
         response = client.get("/auth", headers={"X-Forwarded-For": "192.168.1.100"})
         assert response.status_code == 200
 
@@ -103,7 +103,7 @@ def test_auth_check_endpoint(client, mock_auth_service):
     """Test /auth/check endpoint returns authorization status."""
     mock_auth_service.is_authorized.return_value = False
 
-    with patch("teamspeak_auth.api.auth_service", mock_auth_service):
+    with patch("teamspeak_auth.api.dependencies.auth_service", mock_auth_service):
         response = client.get("/auth/check")
         assert response.status_code == 200
 
@@ -120,7 +120,7 @@ def test_auth_check_by_ip_endpoint(client, mock_auth_service):
         "groups": ["6", "9"],
     }
 
-    with patch("teamspeak_auth.api.auth_service", mock_auth_service):
+    with patch("teamspeak_auth.api.dependencies.auth_service", mock_auth_service):
         response = client.get("/auth/check/192.168.1.50")
         assert response.status_code == 200
 
@@ -135,8 +135,8 @@ def test_status_endpoint(client, mock_auth_service):
     mock_auth_service.authorized_ips = {"192.168.1.1": {}, "192.168.1.2": {}}
     mock_auth_service.get_cache_age.return_value = 15.3
 
-    with patch("teamspeak_auth.api.auth_service", mock_auth_service):
-        with patch("teamspeak_auth.api.config") as mock_config:
+    with patch("teamspeak_auth.api.dependencies.auth_service", mock_auth_service):
+        with patch("teamspeak_auth.api.status.config") as mock_config:
             mock_config.cache_ttl = 30
 
             response = client.get("/status")
@@ -171,7 +171,7 @@ def test_ome_admission_opening_authorized(client, mock_auth_service):
         },
     }
 
-    with patch("teamspeak_auth.api.auth_service", mock_auth_service):
+    with patch("teamspeak_auth.api.dependencies.auth_service", mock_auth_service):
         response = client.post("/ome/admission", json=payload)
         assert response.status_code == 200
 
@@ -198,7 +198,7 @@ def test_ome_admission_opening_unauthorized(client, mock_auth_service):
         },
     }
 
-    with patch("teamspeak_auth.api.auth_service", mock_auth_service):
+    with patch("teamspeak_auth.api.dependencies.auth_service", mock_auth_service):
         response = client.post("/ome/admission", json=payload)
         assert response.status_code == 200
 
@@ -223,7 +223,7 @@ def test_ome_admission_closing(client, mock_auth_service):
         },
     }
 
-    with patch("teamspeak_auth.api.auth_service", mock_auth_service):
+    with patch("teamspeak_auth.api.dependencies.auth_service", mock_auth_service):
         response = client.post("/ome/admission", json=payload)
         assert response.status_code == 200
 
@@ -251,7 +251,7 @@ def test_ome_admission_uses_real_ip(client, mock_auth_service):
         },
     }
 
-    with patch("teamspeak_auth.api.auth_service", mock_auth_service):
+    with patch("teamspeak_auth.api.dependencies.auth_service", mock_auth_service):
         response = client.post("/ome/admission", json=payload)
         assert response.status_code == 200
 
