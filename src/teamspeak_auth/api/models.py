@@ -15,6 +15,7 @@ class StatusResponse(BaseModel):
     """Response model for service status."""
 
     status: str
+    teamspeak_connected: bool
     authorized_users_count: int
     cache_age_seconds: float
     cache_ttl_seconds: int
